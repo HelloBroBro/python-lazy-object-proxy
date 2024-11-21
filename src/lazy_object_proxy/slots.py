@@ -167,8 +167,8 @@ class Proxy(with_metaclass(_ProxyMetaType)):
     def __reversed__(self):
         return reversed(self.__wrapped__)
 
-    def __round__(self):
-        return round(self.__wrapped__)
+    def __round__(self, ndigits=None):
+        return round(self.__wrapped__, ndigits)
 
     def __lt__(self, other):
         return self.__wrapped__ < other
@@ -428,6 +428,9 @@ class Proxy(with_metaclass(_ProxyMetaType)):
 
     def __reduce_ex__(self, protocol):
         return identity, (self.__wrapped__,)
+
+    def __format__(self, format_spec):
+        return self.__wrapped__.__format__(format_spec)
 
     if await_:
         from .utils import __aenter__

@@ -1,5 +1,5 @@
 name: build
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
     name: {{ '${{ matrix.name }}' }}
@@ -21,6 +21,8 @@ jobs:
             os: 'ubuntu-latest'
 {% for env in tox_environments %}
 {% set prefix = env.split('-')[0] -%}
+{% set nogil = 'ft' in env %}
+{% if not nogil %}
 {% if prefix.startswith('pypy') %}
 {% set python %}pypy-{{ prefix[4] }}.{{ prefix[5:] }}{% endset %}
 {% set cpython %}pp{{ prefix[4:5] }}{% endset %}
@@ -36,8 +38,7 @@ jobs:
     ['ubuntu', 'x64', 'aarch64', '*manylinux*', False],
     ['ubuntu', 'x64', 'aarch64', '*musllinux*', False],
     ['windows', 'x64', 'AMD64', '*', True],
-    ['windows', 'x86', 'x86', '*', False],
-    ['macos', 'x64', 'x86_64', '*', True],
+    ['macos', 'arm64', 'arm64', '*', True],
 ] %}
 {% if include_cover or ('nocov' in env and not prefix.startswith('pypy')) %}
 {% set wheel_suffix = 'nocov' in env and wheel_arch.strip('*') %}
@@ -45,20 +46,22 @@ jobs:
           - name: '{{ env }} ({{ os }}/{{ cibw_arch }}{{ name_suffix }})'
             python: '{{ python }}'
             toxpython: '{{ toxpython }}'
-            python_arch: '{{ python_arch }}'
+            python_arch: '{{ python_arch }}{% if nogil %}-freethreaded{% endif %}'
             tox_env: '{{ env }}'
 {% if 'cover' in env %}
             cover: true
 {% endif %}
             cibw_arch: '{{ cibw_arch }}'
 {% if 'nocov' in env and not prefix.startswith('pypy') %}
-            cibw_build: '{{ cpython }}-{{ wheel_arch }}'
+            cibw_build: '{{ cpython }}{% if nogil %}t{% endif %}-{{ wheel_arch }}'
+            cibw_ft: '{% if nogil %}true{% else %}false{% endif %}'
 {% else %}
             cibw_build: false
 {% endif %}
             os: '{{ os }}-latest'
 {% endif %}
 {% endfor %}
+{% endif %}
 {% endfor %}
     steps:
     - uses: docker/setup-qemu-action@v3
@@ -91,6 +94,7 @@ jobs:
         TOXPYTHON: '{{ '${{ matrix.toxpython }}' }}'
         CIBW_ARCHS: '{{ '${{ matrix.cibw_arch }}' }}'
         CIBW_BUILD: '{{ '${{ matrix.cibw_build }}' }}'
+        CIBW_FREE_THREADED_SUPPORT: '{{ '${{ matrix.cibw_ft }}' }}'
         CIBW_BUILD_VERBOSITY: '3'
         CIBW_TEST_REQUIRES: >
           tox
@@ -135,3 +139,6 @@ jobs:
     - uses: coverallsapp/github-action@v2
       with:
         parallel-finished: true
+    - uses: codecov/codecov-action@v3
+      with:
+        CODECOV_TOKEN: {% raw %}${{ secrets.CODECOV_TOKEN }}{% endraw %}
